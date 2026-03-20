@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AI Digest</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Georgia, serif; background: #f9f7f4; color: #1a1a1a; padding: 40px 20px; }
+  .wrap { max-width: 700px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .meta { font-size: 13px; color: #666; margin-bottom: 32px; }
+  label { display: block; font-size: 13px; color: #555; margin-bottom: 6px; }
+  input[type=email] {
+    width: 100%; padding: 10px 12px; border: 1px solid #ddd;
+    border-radius: 6px; font-size: 14px; font-family: Georgia, serif;
+    background: #fff; margin-bottom: 16px;
+  }
+  .btn {
+    padding: 11px 24px; border: none; border-radius: 6px;
+    font-size: 14px; font-family: Georgia, serif; cursor: pointer;
+  }
+  .btn-primary { background: #1a1a1a; color: #fff; }
+  .btn-secondary { background: #fff; color: #1a1a1a; border: 1px solid #ccc; margin-left: 8px; }
+  .btn-ghost { background: transparent; color: #888; border: 1px solid #ddd; margin-left: 8px; }
+  .hint { font-size: 12px; color: #888; margin-top: 10px; }
+  #status-box { background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 24px; margin-top: 8px; display: none; }
+  #loader { display: none; }
+  .progress { height: 4px; background: #eee; border-radius: 2px; overflow: hidden; margin-top: 16px; }
+  .bar { height: 100%; width: 35%; background: #1a1a1a; border-radius: 2px; animation: slide 1.6s infinite; }
+  @keyframes slide { 0%{transform:translateX(-100%)} 100%{transform:translateX(380%)} }
+  #output { display: none; }
+  .subject-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+  .subject-val { font-weight: 700; font-size: 16px; padding-bottom: 16px; border-bottom: 1px solid #eee; margin-bottom: 20px; }
+  .digest-body { font-size: 15px; line-height: 1.75; }
+  .digest-body h1 { font-size: 18px; margin: 24px 0 12px; }
+  .digest-body h2 { font-size: 15px; font-weight: 700; margin: 20px 0 8px; border-top: 1px solid #eee; padding-top: 16px; }
+  .digest-body p { margin-bottom: 10px; }
+  .digest-body hr { border: none; border-top: 1px solid #eee; margin: 16px 0; }
+  .digest-body a { color: #1a1a1a; }
+  .digest-body em { color: #555; font-style: italic; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
+  #error-box { background: #fff0f0; border: 1px solid #fcc; border-radius: 8px; padding: 20px; color: #c00; display: none; margin-top: 8px; }
+  #sunday-box { background: #fff; border: 1px solid #eee; border-radius: 8px; padding: 24px; font-size: 15px; display: none; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🤖 AI Digest</h1>
+  <p class="meta" id="date-line"></p>
+
+  <div id="form-area">
+    <label for="email">Your email address (for the mailto link)</label>
+    <input type="email" id="email" placeholder="you@example.com"/>
+    <div>
+      <button class="btn btn-primary" onclick="generate()">Generate Today's Digest</button>
+    </div>
+    <p class="hint">Searches the web for today's AI news and formats it to your brief. Takes ~30–60 seconds.</p>
+  </div>
+
+  <div id="sunday-box">😴 No digest on Sundays. See you Monday.</div>
+
+  <div id="loader">
+    <p style="font-size:15px;margin-bottom:8px;">Searching the web and building your digest…</p>
+    <p style="font-size:13px;color:#888;">Usually takes 30–60 seconds.</p>
+    <div class="progress"><div class="bar"></div></div>
+  </div>
+
+  <div id="error-box">
+    <strong>Error:</strong> <span id="error-msg"></span><br/>
+    <button class="btn btn-secondary" style="margin-top:12px;" onclick="reset()">Try again</button>
+  </div>
+
+  <div id="output">
+    <div class="actions">
+      <button class="btn btn-primary" onclick="openMail()">📧 Open in Mail</button>
+      <button class="btn btn-secondary" onclick="copyText()">Copy to Clipboard</button>
+      <button class="btn btn-ghost" onclick="reset()">Regenerate</button>
+    </div>
+    <div id="status-box">
+      <div class="subject-label">Subject</div>
+      <div class="subject-val" id="subject-val"></div>
+      <div class="digest-body" id="body-val"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const MODEL = "claude-sonnet-4-20250514";
+let rawSubject = "", rawBody = "";
+
+function getInfo() {
+  const d = new Date();
+  const day = d.getDay();
+  const dateStr = d.toLocaleDateString("en-US", { weekday:"long", year:"numeric", month:"long", day:"numeric" });
+  return { day, dateStr, isSun: day===0, isSat: day===6 };
+}
+
+function buildPrompt(dateStr, isSat) {
+  if (isSat) return `Today is ${dateStr}. Generate the Saturday "Week in AI" digest.
+
+Search the web for notable AI stories from the past 7 days. Output ONLY this format — no preamble, no code fences:
+
+===SUBJECT===
+Week in AI — ${dateStr}
+
+===BODY===
+
+# 🗓️ WEEK IN AI — ${dateStr.toUpperCase()}
+
+## 🤯 Weirdest Stories of the Week (5–7 items)
+For each item:
+**[Headline]**
+[URL]
+[2–3 sentence description. Plain. No hype.]
+*Why it matters: [One sentence.]*
+
+---
+
+## 📰 Biggest Developments (5–7 items)
+For each item:
+**[Headline]**
+[URL]
+[2–3 sentence description.]
+*Why it matters: [One sentence.]*
+
+---
+
+## What This Week Suggests
+[2–3 sentences. Patterns, tensions, cultural or operational shifts. Direct and plain.]
+
+---
+
+"Weird" = cultural/social AI collisions, unexpected consequences, AI where it shouldn't be. NOT weird: acquisitions, model releases, funding rounds. Be sober. Lead with what happened.`;
+
+  return `Today is ${dateStr}. Generate the daily AI Digest.
+
+Search the web for AI news from the past 24–48 hours. Output ONLY this format — no preamble, no code fences:
+
+===SUBJECT===
+AI Digest — ${dateStr}
+
+===BODY===
+
+# 🤖 AI DIGEST — ${dateStr.toUpperCase()}
+
+## 🧪 Weird / Cultural AI News (2–3 items)
+For each item:
+**[Headline]**
+[URL]
+[2–3 sentence description. Plain. No hype.]
+*Why it matters: [One sentence.]*
+
+---
+
+## 📊 AI News / Serious Signals (2–3 items)
+For each item:
+**[Headline]**
+[URL]
+[2–3 sentence description.]
+*Why it matters: [One sentence.]*
+
+---
+
+## ✍️ Controversial Essay (0–1 items — most days ZERO)
+Only include if widely circulating, polarizing, and actively shaping public perception of AI. If nothing qualifies write: *Nothing clears the bar today.*
+If including:
+**[Title]**
+[URL]
+[1–2 sentences on the argument and why it's getting traction.]
+
+---
+
+## 🔎 Other Things Trending (up to 10)
+Fast scan. One line each with URL. No category obligation.
+
+---
+
+## Bottom Line
+[1–2 sentences. Patterns, tensions, what's shifting culturally or operationally.]
+
+---
+
+"Weird" = cultural/social AI collisions, unexpected consequences, AI where it shouldn't be. NOT weird: acquisitions, model releases, funding rounds. Be sober. Lead with what happened.`;
+}
+
+function parseDigest(raw) {
+  const sm = raw.match(/===SUBJECT===\s*([\s\S]*?)===BODY===/);
+  const bm = raw.match(/===BODY===([\s\S]*)/);
+  return {
+    subject: sm ? sm[1].trim() : "AI Digest",
+    body: bm ? bm[1].trim() : raw.trim()
+  };
+}
+
+function renderBody(text) {
+  return text.split("\n").map(line => {
+    if (line.startsWith("# ")) return `<h1>${line.slice(2)}</h1>`;
+    if (line.startsWith("## ")) return `<h2>${line.slice(3)}</h2>`;
+    if (/^\*\*(.+)\*\*$/.test(line)) return `<p><strong>${line.slice(2,-2)}</strong></p>`;
+    if (/^\*(.+)\*$/.test(line)) return `<p><em>${line.slice(1,-1)}</em></p>`;
+    if (line.startsWith("---")) return `<hr/>`;
+    if (line.trim() === "") return "";
+    const linked = line.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank">$1</a>');
+    return `<p>${linked}</p>`;
+  }).join("");
+}
+
+async function generate() {
+  const { day, dateStr, isSun, isSat } = getInfo();
+  document.getElementById("date-line").textContent = dateStr + (isSat ? " — Saturday / Week in AI edition" : "");
+
+  if (isSun) {
+    document.getElementById("sunday-box").style.display = "block";
+    document.getElementById("form-area").style.display = "none";
+    return;
+  }
+
+  document.getElementById("form-area").style.display = "none";
+  document.getElementById("loader").style.display = "block";
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 1000,
+        tools: [{ type: "web_search_20250305", name: "web_search" }],
+        messages: [{ role: "user", content: buildPrompt(dateStr, isSat) }]
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error?.message || "API error");
+    const full = data.content.filter(b => b.type === "text").map(b => b.text).join("\n");
+    const parsed = parseDigest(full);
+    rawSubject = parsed.subject;
+    rawBody = parsed.body;
+
+    document.getElementById("subject-val").textContent = rawSubject;
+    document.getElementById("body-val").innerHTML = renderBody(rawBody);
+    document.getElementById("status-box").style.display = "block";
+    document.getElementById("loader").style.display = "none";
+    document.getElementById("output").style.display = "block";
+  } catch(e) {
+    document.getElementById("loader").style.display = "none";
+    document.getElementById("error-msg").textContent = e.message;
+    document.getElementById("error-box").style.display = "block";
+  }
+}
+
+function openMail() {
+  const to = encodeURIComponent(document.getElementById("email").value || "");
+  const sub = encodeURIComponent(rawSubject);
+  const bod = encodeURIComponent(rawBody);
+  window.location.href = `mailto:${to}?subject=${sub}&body=${bod}`;
+}
+
+function copyText() {
+  navigator.clipboard.writeText(rawSubject + "\n\n" + rawBody);
+  alert("Copied to clipboard.");
+}
+
+function reset() {
+  document.getElementById("output").style.display = "none";
+  document.getElementById("error-box").style.display = "none";
+  document.getElementById("status-box").style.display = "none";
+  document.getElementById("form-area").style.display = "block";
+}
+
+// Set date on load
+const { dateStr, isSat } = getInfo();
+document.getElementById("date-line").textContent = dateStr + (isSat ? " — Saturday / Week in AI edition" : "");
+</script>
+</body>
+</html>
