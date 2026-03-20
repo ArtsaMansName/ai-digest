@@ -10,28 +10,19 @@
   .wrap { max-width: 700px; margin: 0 auto; }
   h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
   .meta { font-size: 13px; color: #666; margin-bottom: 32px; }
-  label { display: block; font-size: 13px; color: #555; margin-bottom: 6px; }
-  input[type=email] {
-    width: 100%; padding: 10px 12px; border: 1px solid #ddd;
-    border-radius: 6px; font-size: 14px; font-family: Georgia, serif;
-    background: #fff; margin-bottom: 16px;
-  }
   .btn {
     padding: 11px 24px; border: none; border-radius: 6px;
     font-size: 14px; font-family: Georgia, serif; cursor: pointer;
   }
-  .btn-primary { background: #1a1a1a; color: #fff; }
-  .btn-secondary { background: #fff; color: #1a1a1a; border: 1px solid #ccc; margin-left: 8px; }
+  .btn-secondary { background: #fff; color: #1a1a1a; border: 1px solid #ccc; }
   .btn-ghost { background: transparent; color: #888; border: 1px solid #ddd; margin-left: 8px; }
-  .hint { font-size: 12px; color: #888; margin-top: 10px; }
   #status-box { background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 24px; margin-top: 8px; display: none; }
   #loader { display: none; }
   .progress { height: 4px; background: #eee; border-radius: 2px; overflow: hidden; margin-top: 16px; }
   .bar { height: 100%; width: 35%; background: #1a1a1a; border-radius: 2px; animation: slide 1.6s infinite; }
   @keyframes slide { 0%{transform:translateX(-100%)} 100%{transform:translateX(380%)} }
   #output { display: none; }
-  .subject-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
-  .subject-val { font-weight: 700; font-size: 16px; padding-bottom: 16px; border-bottom: 1px solid #eee; margin-bottom: 20px; }
+  .subject-val { font-weight: 700; font-size: 18px; padding-bottom: 16px; border-bottom: 1px solid #eee; margin-bottom: 20px; }
   .digest-body { font-size: 15px; line-height: 1.75; }
   .digest-body h1 { font-size: 18px; margin: 24px 0 12px; }
   .digest-body h2 { font-size: 15px; font-weight: 700; margin: 20px 0 8px; border-top: 1px solid #eee; padding-top: 16px; }
@@ -49,8 +40,6 @@
   <h1>🤖 AI Digest</h1>
   <p class="meta" id="date-line"></p>
 
-  <div id="form-area"></div>
-
   <div id="sunday-box">😴 No digest on Sundays. See you Monday.</div>
 
   <div id="loader">
@@ -61,17 +50,15 @@
 
   <div id="error-box">
     <strong>Error:</strong> <span id="error-msg"></span><br/>
-    <button class="btn btn-secondary" style="margin-top:12px;" onclick="reset()">Try again</button>
+    <button class="btn btn-secondary" style="margin-top:12px;" onclick="generate()">Try again</button>
   </div>
 
   <div id="output">
     <div class="actions">
-      <button class="btn btn-primary" onclick="openMail()">📧 Open in Mail</button>
       <button class="btn btn-secondary" onclick="copyText()">Copy to Clipboard</button>
       <button class="btn btn-ghost" onclick="generate()">Regenerate</button>
     </div>
     <div id="status-box">
-      <div class="subject-label">Subject</div>
       <div class="subject-val" id="subject-val"></div>
       <div class="digest-body" id="body-val"></div>
     </div>
@@ -200,16 +187,17 @@ function renderBody(text) {
 }
 
 async function generate() {
-  const { day, dateStr, isSun, isSat } = getInfo();
+  const { dateStr, isSun, isSat } = getInfo();
   document.getElementById("date-line").textContent = dateStr + (isSat ? " — Saturday / Week in AI edition" : "");
+  document.getElementById("output").style.display = "none";
+  document.getElementById("error-box").style.display = "none";
+  document.getElementById("status-box").style.display = "none";
 
   if (isSun) {
     document.getElementById("sunday-box").style.display = "block";
-    document.getElementById("form-area").style.display = "none";
     return;
   }
 
-  document.getElementById("form-area").style.display = "none";
   document.getElementById("loader").style.display = "block";
 
   try {
@@ -242,26 +230,11 @@ async function generate() {
   }
 }
 
-function openMail() {
-  const to = encodeURIComponent(document.getElementById("email").value || "");
-  const sub = encodeURIComponent(rawSubject);
-  const bod = encodeURIComponent(rawBody);
-  window.location.href = `mailto:${to}?subject=${sub}&body=${bod}`;
-}
-
 function copyText() {
   navigator.clipboard.writeText(rawSubject + "\n\n" + rawBody);
   alert("Copied to clipboard.");
 }
 
-function reset() {
-  document.getElementById("output").style.display = "none";
-  document.getElementById("error-box").style.display = "none";
-  document.getElementById("status-box").style.display = "none";
-  document.getElementById("form-area").style.display = "block";
-}
-
-// Auto-generate on load
 window.addEventListener("DOMContentLoaded", generate);
 </script>
 </body>
